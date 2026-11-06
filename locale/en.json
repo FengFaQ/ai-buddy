@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "AI Buddy Workbench",
+    "description": "An AI-to-AI multi-conversation collaboration workbench: feed, plan, task and asset modules over one shared execution-rights model, with interruption recovery, idempotency guards and an unexpected-interruption stop-loss lock."
+  }
+}

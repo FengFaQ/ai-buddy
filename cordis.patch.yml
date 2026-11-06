@@ -1,0 +1,84 @@
+# ai-buddy bundle patch — one Host plugin row.
+#
+# The browser half (the project workbench) is wired from the package's
+# `dsh.client` manifest in package.json; no second row is needed.
+#
+# HOW TO OVERRIDE
+# A profile patch row that names the same id REPLACES this entry's `config`
+# wholesale — the Loader assigns the field, it does not deep-merge. This row
+# only carries the defaults the plugin would fall back to anyway, so an
+# override row may name just the keys it changes. `lib/config.js` normalize()
+# fills every key an override leaves out.
+#
+# The plugin is dependency-free on purpose: no Config schema, no npm
+# dependencies. Every tunable below is also editable at runtime from the
+# workbench's Settings tab (POST /ai-buddy/api/config).
+- insert:
+    - id: ai-buddy
+      name: 'ai-buddy'
+      config:
+        # Where the JSON truth layer and the Markdown summaries live.
+        # Empty = <DSH_HOME>/ai-buddy. Relative paths resolve against DSH_HOME.
+        dataDir: ''
+        # Mount the workbench HTTP API and the page route.
+        enableWeb: true
+        # ---- execution rights (§3) ----
+        executionLock:
+          # A held execution right nobody refreshed for this long is released
+          # automatically, so a dead holder cannot freeze a conversation.
+          timeoutMs: 1800000
+          # How long a queued request waits for the current holder.
+          queueMaxWaitMs: 600000
+          maxQueueDepth: 16
+        # ---- recovery (§7.1, §7.4) ----
+        resume:
+          # Silence window after a Host restart before any automatic resume, so
+          # the resume pass never races the user's first post-restart action.
+          silentWindowMs: 15000
+          # Only sessions with activity inside this window are auto-resumed.
+          activeWindowMs: 7200000
+          # Sliding-window cap on automatic resume injections per conversation.
+          maxAutoResumesPerWindow: 5
+          windowMs: 3600000
+          # Running-turn retry ladder for rate-limited failures (§7.1).
+          backoffMs: [30000, 60000, 120000, 180000]
+          # Honor the server's Retry-After when it is longer than the ladder.
+          honorRetryAfter: true
+          # Ceiling for non-dead-end running-turn retries.
+          maxRetryWallMs: 1800000
+        # ---- unexpected-interruption lock (§7.5) ----
+        interruptLock:
+          # Consecutive failed resume attempts that engage the lock.
+          failureThreshold: 3
+          # A resume that keeps the conversation running this long (or that
+          # completes one substantive operation) resets the failure counter.
+          stableWindowMs: 600000
+          # How many human-confirmed trial resumes are allowed while locked.
+          maxTrialResumes: 1
+        # ---- feed (§2.1) ----
+        feed:
+          # AI-initiated posts are rate limited; human posts never are.
+          aiPostsPerMinute: 20
+          # Feed events kept before the oldest are archived to Markdown only.
+          retention: 5000
+        # ---- assets (§2.4) ----
+        assets:
+          # Upload ceiling for one asset.
+          maxAssetBytes: 33554432
+          # Overwriting or deleting these requires human confirmation.
+          highRiskGlobs: ['**/预算*', '**/合同*', '**/*.final.*']
+        # ---- checkpoints (§6) ----
+        checkpoints:
+          # Checkpoints retained per conversation before the oldest rotate out.
+          perConversationRetention: 200
+          # How many are inlined into a resume brief.
+          briefInlineCount: 3
+        # ---- team lifecycle (§13) ----
+        team:
+          # Rebuild sessions for roster seats that lost their live agent.
+          # OFF by default: enabling this plugin must never open a billable
+          # conversation on its own. A seat wakes when the human asks for it.
+          autoSpawn: false
+          # Let the leader's watch re-deliver a human @mention to a member that
+          # was not running. Also off by default, for the same reason.
+          autoWakeMentions: false

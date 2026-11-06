@@ -1,0 +1,43 @@
+# Dependencies (the plugin ships zero runtime dependencies on purpose —
+# the host provides everything it needs through `ctx`).
+node_modules/
+.pnpm-store/
+
+# Build / packaging output
+*.tgz
+*.tar.gz
+dist/
+build/
+.eslintcache
+
+# NOTE: `lib/` is the plugin's *source*, not build output — it ships as-is.
+# Never exclude it here.
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Local environment
+.env
+.env.*
+!.env.example
+*.local
+
+# Test and diagnostic output
+coverage/
+.nyc_output/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# The plugin's own runtime data, if someone runs it in-tree
+.dsh/
+ai-buddy-data/
+tmp/
+.temp/

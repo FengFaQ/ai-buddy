@@ -1,0 +1,63 @@
+{
+  "name": "ai-buddy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AI-to-AI multi-conversation collaboration workbench for DSH: feed, plan, task and asset modules on a shared execution-rights model, with a resume subsystem and an unexpected-interruption lock.",
+  "license": "MIT",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "docs",
+    "CONTRACT.md",
+    "DESIGN.md",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.0.0",
+    "dsh": ">=0.2.0-rc.1 <0.3.0-0"
+  },
+  "scripts": {
+    "test": "node test/run.mjs",
+    "test:live": "node test/run.mjs --live"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "dsh-bundle",
+    "multi-agent",
+    "collaboration",
+    "workbench",
+    "execution-lock",
+    "resume",
+    "idempotency",
+    "checkpoint"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": false
+    },
+    "compatibility": {
+      "dsh": ">=0.2.0-rc.1 <0.3.0-0"
+    }
+  }
+}
