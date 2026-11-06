@@ -25,6 +25,7 @@ const OFFLINE = [
   ['team.mjs', 'team subsystem'],
   ['host-safety.mjs', 'host process safety'],
   ['autospawn.mjs', 'no auto-created conversations'],
+  ['rights.mjs', 'a released member holds no execution right'],
 ]
 
 /** The suite that needs a live host. */

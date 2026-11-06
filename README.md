@@ -54,7 +54,7 @@ ai-buddy/
 ## 测试
 
 ```bash
-npm test          # 239 项断言，纯离线，不碰宿主、不调模型
+npm test          # 247 项断言，纯离线，不碰宿主、不调模型
 npm run test:live # 追加 7 项真机断言（需要 DSH 在运行）
 ```
 
@@ -66,6 +66,7 @@ npm run test:live # 追加 7 项真机断言（需要 DSH 在运行）
 | `test/team.mjs` | 63 | 团队子系统 |
 | `test/host-safety.mjs` | 28 | **宿主进程安全**（见下） |
 | `test/autospawn.mjs` | 15 | **启用插件不得自动创建对话** + **团队可拆除** |
+| `test/rights.mjs` | 8 | **释放执行权真的落盘** |
 | `test/live.mjs` | 7 | **真机端到端**：对着活的宿主建团队，让真的模型跑一轮 |
 
 真机套件需要环境变量 `DSH_BASE`（默认 `http://127.0.0.1:3080`）和 `DSH_HOME`（默认 `~/.dsh`）。它会创建真实会话，因此是**可选**的。

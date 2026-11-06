@@ -1523,7 +1523,51 @@ turn/end  reason.kind = "error"
 
 **修复**：`ensureWorkspace()` 先 `ensureDir(path)` 再注册。人类在初始化页选一个目录，意思就是"在这里干活"；为一个还不存在的目录拒绝开工是讲不通的。
 
-### 13.11 阶段四附带修复：团队必须能被拆除
+### 13.9 阶段四附带修复：释放执行权其实是无效的
+
+**现象**：给一个成员释放执行权后，任务上的 `executionLock.holder` **纹丝不动**。这个成员继续占着这个权利直到租约超时（默认 30 分钟），而其他成员只能在 FIFO 队列里排队等一个**已经不存在的人**。
+
+**根因**：`locks.release()` 把释放**算出来了**，却没**写下去**。
+
+```js
+// 修复前 —— 两条路径都是这个形状
+const next = { ...task, executionLock: { ...task.executionLock, holder: null, … } }
+const reconciled = reconcile(store, projectId, next, { config, promote: true }).task
+```
+
+`reconcile` 只在**它自己**改了东西的时候才落盘（`if (changed) saveTask(…)`）。而在这里它看不到任何变化：
+
+- 调用方已经把 holder 清空了；
+- 队列是空的，所以没有���可以提升；
+- 于是 `changed === false` → **不写**。
+
+结果：释放被计算、被丢弃，任务在磁盘上仍然写着旧 holder。
+
+**两条路径都中招**，而其中一条是**最常见的用法**：
+
+| 路径 | 谁会走 |
+|---|---|
+| holder 释放自己的权利 | 成员干完活、调用 `release_execution_lock` —— **日常路径** |
+| 人类/拆除强制释放 | 人类在面板上点「释放」 —— 罕见路径 |
+
+也就是说，**这个插件的释放执行权功能从来没有真正工作过**。之前的测试没发现，是因为 `test/json.mjs` 在同一个任务上「取锁 → 释放 → 继续假设自己还持锁」——释放是空操作，后面的步骤才得以通过。**测试是靠 bug 才通过的。**
+
+**修复**：写入必须在 `release` 自己手里，不能指望 `reconcile` 代劳：
+
+```js
+const reconciled = reconcile(store, projectId, next, { config, promote: true })
+const saved = reconciled.changed
+  ? reconciled.task
+  : saveTask(store, projectId, next)   // ← reconcile 没改，就我们自己写
+```
+
+**连带修复**：`releaseHeldRights()` 现在在 `dispose` 与 `sleep` 里被调用——被释放的成员不该继续占着团队的执行权。
+
+**附带补上的 API 缺口**：工作台一直有「释放执行权」按钮，却**没有**「取得执行权」的操作。人类看着一个没人认领的任务，除了等 agent 自己去抢之外无从下手。现在有 `POST /ai-buddy/api/task` 的 `op: 'take'`。
+
+**验证**：`test/rights.mjs`（8 项断言）覆盖两条路径；并且我**特意把修复临时回退**跑了一遍，确认套件确实会失败（2 项）——一个在坏代码上也能通过的回归测试，比没有测试更糟。
+
+### 13.10 阶段四附带修复：团队必须能被拆除
 
 **现象**：真机自检跑完后，一个 leader 会话仍然活着。它手里攥着打开的会话日志文件；任何后续的清理（清理脚本、用户手动删除、磁盘回收）删掉那个文件，正在运行的 agent 就会失败：
 
@@ -1554,7 +1598,7 @@ Error: ENOENT: no such file or directory, open '…\session.v4.jsonl.zstd'
 
 **真机自检现在自己收尾**：跑完就 `dispose` 掉它创建的 agent，所以它不再留下一个攥着日志文件的后台进程。清理脚本也因此改成了**先查活 agent 再删**：有活 agent 的工作区一律跳过并报告，绝不删除。
 
-### 13.12 阶段四的自检套件
+### 13.11 阶段四的自检套件
 
 | 套件 | 断言数 | 覆盖 |
 |---|---|---|
@@ -1563,10 +1607,11 @@ Error: ENOENT: no such file or directory, open '…\session.v4.jsonl.zstd'
 | `test/json.mjs` | 39 | 工具返回值的无损 JSON |
 | `test/team.mjs` | 63 | 团队子系统 |
 | `test/host-safety.mjs` | 28 | **宿主进程安全**（§13.6） |
-| `test/autospawn.mjs` | 15 | **启用即建会话的闸门**（§13.7）+ **团队可拆除**（§13.11） |
+| `test/autospawn.mjs` | 15 | **启用即建会话的闸门**（§13.7）+ **团队可拆除**（§13.10） |
+| `test/rights.mjs` | 8 | **释放执行权真的落盘**（§13.9） |
 | `test/live.mjs` | 7 | **真机端到端**：对着活的宿主建团队，让真的模型跑一轮 |
 
-跑法：`npm test`（离线 236 项）、`npm run test:live`（追加真机 7 项）。真机套件可选——它会创建真实会话、消耗真实配额。
+跑法：`npm test`（离线 247 项）、`npm run test:live`（追加真机 7 项）。真机套件可选——它会创建真实会话、消耗真实配额。
 
 `test/live.mjs` 是最有价值的一个：它不 mock 任何东西。它通过真实 HTTP API 初始化一个团队，然后解码 zstd 压缩的会话日志，断言
 
@@ -1576,7 +1621,7 @@ Error: ENOENT: no such file or directory, open '…\session.v4.jsonl.zstd'
 - 那一轮没有以错误结束；
 - 期间宿主没有产生新的崩溃日志。
 
-### 13.10 一条给未来的教训：解析宿主产物时，先验证你的假设
+### 13.12 一条给未来的教训：解析宿主产物时，先验证你的假设
 
 写这套 live 自检时，我在自己的测试里犯了三个错，每一个都让断言"稳定地失败"：
 

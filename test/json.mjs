@@ -111,6 +111,19 @@ const peerTask = task.create(store, config, projectId, {
   actor: { type: 'agent', id: actor.name, name: actor.name },
   title: '对端任务', ownerAgent: 'peer-agent',
 })
+// A third task, used only to exercise `release_execution_lock`.
+//
+// The release must be exercised on its own task: the other steps below need
+// `seedTask` to still hold the execution right, and a release that actually
+// releases (which it now does) would take that right away. Releasing on a
+// shared task would have hidden the difference between a release that works
+// and one that is silently dropped.
+const releaseTask = task.create(store, config, projectId, {
+  actor: { type: 'agent', id: actor.name, name: actor.name },
+  title: '释放用任务', ownerAgent: 'agent-1',
+})
+// The release only has something to release if the right was taken first.
+locks.request(store, config, projectId, { taskId: releaseTask.id, agent: 'agent-1' })
 feed.post(store, config, projectId, {
   actor: { type: 'human', id: 'human', name: 'Human' },
   content: '人类指令', category: 'human.instruction', source: 'human',
@@ -129,7 +142,7 @@ const calls = [
   ['read_plan', { filter: 'all' }],
   ['create_conversation', { title: 'JSON 自检会话' }],
   ['request_execution_lock', { conversation_id: seedTask.id }],
-  ['release_execution_lock', { conversation_id: seedTask.id }],
+  ['release_execution_lock', { conversation_id: releaseTask.id }],
   ['share_conversation_readonly', { conversation_id: seedTask.id, target_agent: 'peer' }],
   ['reference_conversation', { source_conversation_id: seedTask.id, target_conversation_id: peerTask.id }],
   ['query_assets', { query: '种子', scope: 'project' }],

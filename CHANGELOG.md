@@ -58,6 +58,34 @@ reply.** The session was created and the bootstrap prompt delivered, but the
 first turn died with `working-directory: directory does not exist`. The
 directory is now created before the workspace is registered.
 
+**Fixed — releasing the execution right never actually released it.**
+`locks.release()` computed the release but did not persist it: `reconcile()`
+only writes when *it* changed something, and it sees no change when the queue
+is empty — the caller already cleared the holder and there is nobody to
+promote. So the release was computed and then silently dropped, and the task
+still named its old holder on disk.
+
+Both paths were affected, and one of them is the ordinary one: a member
+releasing its own right when it finished. In practice the feature had never
+worked — a member kept the right for the rest of its 30-minute lease while
+everybody else queued behind a member that was no longer there.
+
+The earlier test suite did not notice because it took a lock, released it, and
+then went on assuming it still held it — the release was a no-op, which is
+what let the later steps pass. The test was passing *because of* the bug.
+
+- **Fixed** both release paths in `lib/core/locks.js` to write the release
+  themselves instead of relying on `reconcile` to persist it.
+- **Added** `teamRuntime.releaseHeldRights()` — a released member must not
+  keep blocking its team, so `dispose` and `sleep` release the rights the
+  member held, promoting the next in the FIFO queue in the same write.
+- **Added** `POST /ai-buddy/api/task` with `op: 'take'`. The workbench could
+  always *release* an execution right but never take one, so a human watching
+  a task nobody had claimed had no way to act on it.
+- **Added** `test/rights.mjs`. The fix was verified by reverting it and
+  confirming the suite fails: a regression test that passes against the
+  broken code is worse than no test.
+
 **Fixed — a team could not be taken down.** `sleep` parks a member that waits
 for a human and keeps its seat resumable, and it refuses the leader — "the
 leader must stay awake to coordinate". That refusal is right for a human's
@@ -72,6 +100,13 @@ log; deleting that log later made the running agent fail with `ENOENT`.
 - **Added** `POST /ai-buddy/api/team` with `op: 'dispose'`.
 - The end-to-end suite now releases the agent it creates, so it no longer
   leaves a background process holding a session log.
+
+### Tests
+
+254 assertions across eight suites. `npm test` runs the 247 offline ones;
+`npm run test:live` adds 7 end-to-end assertions against a running host that
+drive a real model turn. The suites live in `test/` and resolve the plugin
+root from their own location, so they work in any checkout.
 
 ### 阶段三 — 团队与任务图
 
