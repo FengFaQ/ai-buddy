@@ -1523,7 +1523,38 @@ turn/end  reason.kind = "error"
 
 **修复**：`ensureWorkspace()` 先 `ensureDir(path)` 再注册。人类在初始化页选一个目录，意思就是"在这里干活"；为一个还不存在的目录拒绝开工是讲不通的。
 
-### 13.9 阶段四的自检套件
+### 13.11 阶段四附带修复：团队必须能被拆除
+
+**现象**：真机自检跑完后，一个 leader 会话仍然活着。它手里攥着打开的会话日志文件；任何后续的清理（清理脚本、用户手动删除、磁盘回收）删掉那个文件，正在运行的 agent 就会失败：
+
+```
+Error: ENOENT: no such file or directory, open '…\session.v4.jsonl.zstd'
+```
+
+**为什么这不是插件的 bug**：agent 本该由宿主管理它的会话日志。但在这里，这个 agent 是**插件创建的**，而插件没有给它一条拆除路径——于是人成了唯一的拆除手段，而人是不会知道该删哪个文件的。
+
+**根因**：`sleep()` 拒绝 leader（"the leader must stay awake to coordinate"）。这个拒绝对**人类的决策**是对的——领导者确实不该被"休眠"。但它顺带关掉了唯一的拆除入口：`remove_member` 只改名册，不释放 agent；`sleep` 够不着 leader。于是没有任何操作能把一个团队拆掉。
+
+**修复**：新增 `dispose(projectId, memberName, reason)`，**对任何角色都可用**：
+
+1. 中断当前回合，让回合干净收尾；
+2. `handle.dispose()` —— 真正释放 agent；
+3. 复查 `agents.get(sessionId)`，**只有确认 agent 已消失**才写 `dormant`，否则写 `offline`。
+
+它与 `sleep` 的区别不是能力，是**意图**：
+
+| | `sleep` | `dispose` |
+|---|---|---|
+| 语义 | 「这个成员在等人类，座位保留，可被唤醒」 | 「这个 agent 被释放，座位不再指向活会话」 |
+| leader | 拒绝 | 允许 |
+| 座位 | 保留 `sessionId`，可 `wake` 回来 | 同样保留 id，但 agent 已不在 |
+| 用途 | 人类的决策 | 拆除一个用完的团队 |
+
+工作台 API 同步新增 `POST /ai-buddy/api/team` 的 `op: 'dispose'`。
+
+**真机自检现在自己收尾**：跑完就 `dispose` 掉它创建的 agent，所以它不再留下一个攥着日志文件的后台进程。清理脚本也因此改成了**先查活 agent 再删**：有活 agent 的工作区一律跳过并报告，绝不删除。
+
+### 13.12 阶段四的自检套件
 
 | 套件 | 断言数 | 覆盖 |
 |---|---|---|
@@ -1532,7 +1563,7 @@ turn/end  reason.kind = "error"
 | `test/json.mjs` | 39 | 工具返回值的无损 JSON |
 | `test/team.mjs` | 63 | 团队子系统 |
 | `test/host-safety.mjs` | 28 | **宿主进程安全**（§13.6） |
-| `test/autospawn.mjs` | 12 | **启用即建会话的闸门**（§13.7） |
+| `test/autospawn.mjs` | 15 | **启用即建会话的闸门**（§13.7）+ **团队可拆除**（§13.11） |
 | `test/live.mjs` | 7 | **真机端到端**：对着活的宿主建团队，让真的模型跑一轮 |
 
 跑法：`npm test`（离线 236 项）、`npm run test:live`（追加真机 7 项）。真机套件可选——它会创建真实会话、消耗真实配额。

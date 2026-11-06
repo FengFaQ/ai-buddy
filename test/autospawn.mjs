@@ -181,6 +181,49 @@ check('creating a task still binds a conversation', () => {
   assert.match(source, /teamRuntime\.spawn\(projectId, ownerAgent\)/)
 })
 
+// ------------------------------------------------- a team can be torn down
+
+/**
+ * `sleep` parks a member that waits for a human and keeps its seat
+ * resumable — and it refuses the leader ("the leader must stay awake to
+ * coordinate"). That refusal is right for a human's decision, but it left no
+ * way to take a team down: a finished team, or a test run, kept its agent
+ * alive, holding an open session log and burning tokens.
+ *
+ * A live agent whose log is later deleted fails with `ENOENT: no such file
+ * or directory` — which reads like a plugin bug and is not one. So the
+ * teardown path has to exist, and it has to work for every role.
+ */
+check('the runtime can release any member, including the leader', () => {
+  const source = fs.readFileSync(`${ROOT}/lib/host/team-runtime.js`, 'utf8')
+  assert.match(source, /async function dispose\(projectId, memberName, reason/)
+  // `dispose` must not carry the leader's restriction that `sleep` has.
+  const disposeBody = source.slice(source.indexOf('async function dispose('))
+  const sleepAt = disposeBody.indexOf('async function sleep(')
+  const body = sleepAt === -1 ? disposeBody : disposeBody.slice(0, sleepAt)
+  assert.equal(body.includes('must stay awake'), false,
+    'dispose must be able to release the leader; that is the whole point of it')
+  assert.match(body, /handle\.dispose\(\)/,
+    'dispose must actually release the agent, not just mark the seat')
+})
+
+check('the dispose operation is exposed on the workbench API', () => {
+  const source = fs.readFileSync(`${ROOT}/lib/web.js`, 'utf8')
+  assert.match(source, /op === 'dispose'/)
+  assert.match(source, /teamRuntime\.dispose\(projectId, body\.name/)
+})
+
+check('dispose reports dormancy only after the agent is confirmed gone', () => {
+  const source = fs.readFileSync(`${ROOT}/lib/host/team-runtime.js`, 'utf8')
+  const disposeBody = source.slice(source.indexOf('async function dispose('))
+  const sleepAt = disposeBody.indexOf('async function sleep(')
+  const body = sleepAt === -1 ? disposeBody : disposeBody.slice(0, sleepAt)
+  assert.match(body, /findAgent\(sessionId\)/,
+    'dispose must re-check the agent after disposing it')
+  assert.match(body, /dormant \? 'dormant' : 'offline'/,
+    "the seat must only claim 'dormant' when the agent is really gone")
+})
+
 // ------------------------------------------------------------------- report
 
 console.log('')

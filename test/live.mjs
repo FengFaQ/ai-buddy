@@ -220,6 +220,40 @@ check('initializing creates exactly one session', () => {
   assert.ok(createdFiles.length >= 1, 'the workspace must hold the leader session')
 })
 
+/**
+ * Tear the team down.
+ *
+ * The suite creates a *live* agent. Leaving it running would mean:
+ *
+ *   - the agent keeps its session log open, and any later deletion of that
+ *     file (by a cleanup script, by the user, by a disk sweep) makes the
+ *     running agent fail with `ENOENT: no such file or directory`;
+ *   - the agent keeps burning tokens between runs;
+ *   - the team lingers in the workbench's workspace list.
+ *
+ * So the suite must release the agent before it exits.
+ *
+ * The operation is `dispose`, not `sleep`: `sleep` parks a member that waits
+ * for a human and keeps its seat resumable, and it *refuses the leader* —
+ * "the leader must stay awake to coordinate". A teardown needs the leader
+ * released too, so `dispose` exists for exactly this.
+ */
+async function teardown() {
+  if (init.body.projectId === undefined || init.body.team === undefined) return
+  const projectId = init.body.projectId
+  const members = init.body.team?.members ?? []
+  for (const member of members) {
+    try {
+      await postJson('/ai-buddy/api/team', {
+        op: 'dispose',
+        projectId,
+        name: member.name,
+        reason: 'live 自检结束',
+      })
+    } catch { /* best effort — the suite must still report its own results */ }
+  }
+}
+
 // ------------------------------- 4. the stored session must be well-formed
 
 // Wait for the leader's first turn to finish before reading the log.
@@ -335,6 +369,32 @@ check('the host did not crash', () => {
 })
 
 // ------------------------------------------------------------------- report
+
+/**
+ * Park the agents this run created, whatever the outcome.
+ *
+ * Registered on `exit` so it runs even when a check throws: a suite that
+ * fails must not leave a live agent behind holding an open session log.
+ */
+process.on('exit', () => {
+  // `sleep` is asynchronous, so it cannot be awaited here. The request has
+  // already been *sent* synchronously enough for the host to begin the
+  // interrupt, and the exit handler's job is only to fire the request.
+  try {
+    const projectId = init?.body?.projectId
+    const members = init?.body?.team?.members ?? []
+    for (const member of members) {
+      void postJson('/ai-buddy/api/team', {
+        op: 'dispose',
+        projectId,
+        name: member.name,
+        reason: 'live 自检结束',
+      }).catch(() => {})
+    }
+  } catch { /* best effort */ }
+})
+
+await teardown()
 
 console.log('')
 console.log(`ai-buddy live suite: ${passed} passed, ${failed} failed`)

@@ -58,6 +58,21 @@ reply.** The session was created and the bootstrap prompt delivered, but the
 first turn died with `working-directory: directory does not exist`. The
 directory is now created before the workspace is registered.
 
+**Fixed — a team could not be taken down.** `sleep` parks a member that waits
+for a human and keeps its seat resumable, and it refuses the leader — "the
+leader must stay awake to coordinate". That refusal is right for a human's
+decision, but it left no teardown path at all: `remove_member` only edits the
+roster without releasing the agent, and `sleep` cannot reach the leader. A
+finished team — or a test run — kept its agent alive, holding an open session
+log; deleting that log later made the running agent fail with `ENOENT`.
+
+- **Added** `teamRuntime.dispose(projectId, memberName, reason)` — releases
+  any member's agent, the leader included, and only reports `dormant` after
+  the agent is confirmed gone.
+- **Added** `POST /ai-buddy/api/team` with `op: 'dispose'`.
+- The end-to-end suite now releases the agent it creates, so it no longer
+  leaves a background process holding a session log.
+
 ### 阶段三 — 团队与任务图
 
 - **Added** the leader as a *role*: it introduces members, interfaces with
