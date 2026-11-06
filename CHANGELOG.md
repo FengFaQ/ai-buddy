@@ -6,6 +6,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 阶段五 — 实测修复（团队 7-bug 报告）
+
+A real team ran real work on this plugin and filed seven bugs. All seven were
+reproduced in code and fixed; the ones that made the team unable to work are
+one causal chain.
+
+**Fixed — every agent resolved to the actor name `agent-session-`.**
+BUG-1, the root of the chain. `actorFor`'s fallback sliced the session id to
+8 characters, and a session id that starts with `session-` slices to exactly
+`"session-"` — so the composed name was `agent-session-` for the leader and
+every member alike. `plan.updateStatus` compares the actor against the
+execution-lock holder, so no member could mark its own plan item in progress:
+the team could not self-organise at all.
+
+The real defect was an unwalked identity path: a team member's session is
+bound to its seat through the **roster** (`team.bindSession`), not through
+`task.conversationId`, so resolving by task ownership alone could never find
+a member. `actorFor` now checks the roster first, then the bound task, and
+falls back to the session id **verbatim** — a fallback that mangles the only
+durable identity the caller has is worse than none.
+
+**Fixed — a member that did not know its task id could not take the
+execution right (BUG-2) and `link_asset_to_conversation` failed the same way
+(BUG-7).** One root: task resolution only followed `task.conversationId`.
+A shared `resolveTaskId` now tries an explicit id, then the bound task, then
+the caller's own open task by owner name — and when nothing resolves, the
+error **lists the active tasks and their owners** instead of telling the
+caller to pass an id it has no way to know.
+
+**Fixed — `create_conversation` did not grant the execution right it
+promised (BUG-3).** The tool description said 「创建后你会获得该任务的执行权」;
+the code never took it. An owner without the right could not even mark its
+own item in progress. The tool now requests the right for the owner at
+creation time and reports honestly when someone else already holds it.
+
+**Fixed — the coordinator re-delivered an unchanged report every 30 seconds
+(BUG-4).** With a stuck state — a blocked plan item nobody can fix — the
+watch sent the same findings to the leader 11+ times, each one a real model
+turn. `reportToLeader` now records the signature of what it delivered and
+sends again only when the findings differ. A finding that persists silently
+is correct: the human sees it in the workbench panels, and the leader already
+has it in context.
+
+**Fixed — `read_feed` truncated every event to 160 characters (BUG-5).** A
+leader's adjudication arrived as its first line, and members had to ask for a
+resend. The feed is the team's only shared channel; clipping it there clips
+the collaboration. The tool now returns full content (bounded at 4000
+characters against one pathological post) and the render indents it under
+each header instead of gluing it to one line.
+
+**Fixed — `@mentions` rendered with a doubled prefix (BUG-6).**
+`send_message_to_member` unconditionally prefixed `@name`, but agents
+routinely write the mention into their own content — producing
+`@系统守护 @系统守护 …`. The prefix is now added only when the content does
+not already carry it.
+
+**Added** `test/identity.mjs` — 10 assertions driving the real tool layer
+with Host-style session ids, pinning the identity resolution order, the
+task-resolution fallbacks, the actionable error, the suppression signature,
+and the untruncated feed.
+
 ### 阶段四 — 宿主进程安全（Host process safety）
 
 Two crashes of the DSH host process were traced to this plugin and fixed. The

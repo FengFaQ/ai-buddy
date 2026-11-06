@@ -26,6 +26,7 @@ const OFFLINE = [
   ['host-safety.mjs', 'host process safety'],
   ['autospawn.mjs', 'no auto-created conversations'],
   ['rights.mjs', 'a released member holds no execution right'],
+  ['identity.mjs', 'identity and task resolution (field report bugs 1/2/5/7)'],
 ]
 
 /** The suite that needs a live host. */
