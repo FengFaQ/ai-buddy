@@ -5,6 +5,14 @@
   "type": "module",
   "description": "AI-to-AI multi-conversation collaboration workbench for DSH: feed, plan, task and asset modules on a shared execution-rights model, with a resume subsystem and an unexpected-interruption lock.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FengFaQ/ai-buddy.git"
+  },
+  "homepage": "https://github.com/FengFaQ/ai-buddy#readme",
+  "bugs": {
+    "url": "https://github.com/FengFaQ/ai-buddy/issues"
+  },
   "main": "./lib/index.js",
   "exports": {
     ".": "./lib/index.js",

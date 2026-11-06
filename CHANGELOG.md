@@ -155,5 +155,5 @@ root from their own location, so they work in any checkout.
 - `lib/core/` must stay importable without the host. That is why the message
   layer lives there rather than in `lib/host/`.
 
-[Unreleased]: https://github.com/OWNER/REPO/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/OWNER/REPO/releases/tag/v1.0.0
+[Unreleased]: https://github.com/FengFaQ/ai-buddy/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/FengFaQ/ai-buddy/releases/tag/v1.0.0
