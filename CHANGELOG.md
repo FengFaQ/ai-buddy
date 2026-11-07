@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 阶段六 — 与官方子智能体体系的适配
+
+**Fixed — `interrupt_agent` reported "not found" for a Chinese member name.**
+
+The Host's own `interrupt_agent` — registered by `@deepseek-ai/dsh-tool-subagent-control`, and in other profiles by the experimental agent-team plugin — only accepts targets its *own* subsystem returned: a session id from `list_agents`, or a teammate target from `spawn_teammate`. ai-buddy members are named in the roster (`小算`), and neither registry knows them, so the model's natural call died with `not found`.
+
+The two systems were invisible to each other, and nothing told the model where the boundary was.
+
+- **Added** `interrupt_member` — interrupts a team member's current turn **by roster name**. The turn stops at its next step boundary with the pending inbox preserved; the member stays online. Leader-only, like the other authority-bearing team tools. Unknown names fail with the actual roster listed, so the caller can recover without a second round trip.
+- **Added** `teamRuntime.interrupt(projectId, memberName, reason)` — resolves the name through the roster and drives the same Host machinery `dispose` uses, but stops the *work* rather than releasing the seat.
+- **Clarified** the descriptions of `send_message_to_member`, `interrupt_member` and `list_team`: they now say explicitly that they act on the ai-buddy roster (names from `list_team`) and that the Host's `send_message` / `interrupt_agent` / `list_agents` belong to the *other* system — the subagents you spawned inside your own conversation.
+- **Updated** the leader and member bootstrap prompts with a 「两套协作体系，不要混用」 section: roster members use the `*_member` / `*_team` tools; your own spawned subagents use `list_agents` / `send_message` / `interrupt_agent`. The decision rule: a target with a role and reporting line is a team member; a target you spawned this conversation is a subagent.
+
+The tool is deliberately **not** named `interrupt_agent` — a second tool of that name would collide at registration, and the model could not have told which one to call. The boundary is drawn by vocabulary, on both sides.
+
+**Added** 4 assertions in `test/identity.mjs` pinning the tool's existence, its leader-only rule, the Chinese-name resolution, and the unknown-name error listing the roster.
+
 ### 阶段五 — 实测修复（团队 7-bug 报告）
 
 A real team ran real work on this plugin and filed seven bugs. All seven were

@@ -101,6 +101,8 @@ async function scenario() {
     checkpoint: await load('lib/core/checkpoint.js'),
     resume: await load('lib/core/resume.js'),
     prompts: await load('lib/core/prompts.js'),
+    team,
+    requests: await load('lib/core/requests.js'),
   }
   const deps = {
     store,
@@ -124,9 +126,32 @@ async function scenario() {
     },
     projectIdFor: () => projectId,
     conversationFor: (agent) => (typeof agent?.id === 'string' ? agent.id : undefined),
-    teamRuntime: undefined,
+    // The team tools are what `interrupt_member` lives in; the runtime is a
+    // stub because this fixture has no live agents — the interrupt path under
+    // test is the *resolution* (name → roster), not the Host interrupt. The
+    // unknown-name case throws, exactly as `teamRuntime.interrupt` does, so
+    // the tool's error reporting is what gets exercised.
+    teamRuntime: {
+      liveAgentMap: () => new Map(),
+      view: (rosterState) => rosterState,
+      send: async () => ({ delivered: false, reason: 'no_live_agent' }),
+      sleep: async () => ({ dormant: true }),
+      spawn: async () => ({ sessionId: 'session-new' }),
+      interrupt: async (_projectId, name) => {
+        const names = (team.load(store, projectId).members ?? []).map((m) => m.name)
+        if (!names.includes(name)) {
+          throw new Error(`ai-buddy team: no member named "${name}". 现有成员：${names.join('、')}`)
+        }
+        return { interrupted: false, reason: 'not_running', sessionId: name }
+      },
+      backupConversation: async () => ({ backedUp: true, assetId: 'a_backup' }),
+    },
+    requests: await load('lib/core/requests.js'),
   }
   toolsMod.registerTools(fakeCtx, deps)
+  // The team tools register through the same fake ctx; collect them too.
+  const teamToolsMod = await load('lib/tools/team.js')
+  teamToolsMod.createTeamTools(deps).forEach((def) => registered.push(def))
 
   const planItem = plan.create(store, config, projectId, {
     actor: { type: 'human', id: 'human', name: 'Human' },
@@ -266,6 +291,56 @@ async function main() {
       const lock = await s.byName.get('request_execution_lock').execute(
         { conversation_id: s.task.id }, memberExec)
       assert.equal(lock.task_id, s.task.id)
+    })
+
+    // ------------------------------------------------ interrupt_member pins
+
+    check('interrupt_member exists and is leader-scoped by description', () => {
+      const def = s.byName.get('interrupt_member')
+      assert.ok(def !== undefined, 'the tool must be registered')
+      assert.match(def.description, /只有领导者可以调用/,
+        'the description must state the authority rule')
+      // The seam with the Host's own interrupt_agent must be stated, or the
+      // model cannot tell the two systems apart — that was the field report's
+      // second complaint.
+      assert.match(def.description, /interrupt_agent/,
+        'the description must name the Host tool it does not replace')
+      assert.match(def.description, /list_team/,
+        'the description must point at where member names come from')
+    })
+
+    await checkAsync('interrupt_member resolves a Chinese member name', async () => {
+      // The exact failure from the field report: a Chinese roster name handed
+      // to an interrupt tool. Here the name goes to *our* tool, which resolves
+      // it through the roster. The seat has a session but no live agent in
+      // this fixture, so the honest outcome is "not running" — not "not
+      // found", which is what the Host tool said.
+      const result = await s.byName.get('interrupt_member').execute(
+        { name: '小算' }, leaderExec)
+      assert.equal(result.name, '小算')
+      assert.equal(result.interrupted, false)
+      assert.match(result.reason, /没有正在运行/,
+        'a parked member is honestly "not running", never "not found"')
+    })
+
+    await checkAsync('interrupt_member refuses a member caller', async () => {
+      await assert.rejects(
+        () => s.byName.get('interrupt_member').execute({ name: '小算' }, memberExec),
+        /只有团队领导者/,
+        'interruption of a teammate is the leader\'s authority',
+      )
+    })
+
+    await checkAsync('interrupt_member reports an unknown name with the roster', async () => {
+      await assert.rejects(
+        () => s.byName.get('interrupt_member').execute({ name: '不存在' }, leaderExec),
+        (error) => {
+          assert.match(error.message, /no member named/)
+          assert.match(error.message, /小算/,
+            'the error must list the actual roster names')
+          return true
+        },
+      )
     })
   } finally {
     s.cleanup()

@@ -206,11 +206,12 @@ try {
   // ------------------------------------------------------ team tool shapes
   console.log('\n=== team tools ===')
   const toolsMod = await load('lib/tools/team.js')
-  check('TEAM_TOOL_NAMES has 7', toolsMod.TEAM_TOOL_NAMES.length === 7,
+  check('TEAM_TOOL_NAMES has 8', toolsMod.TEAM_TOOL_NAMES.length === 8,
     `got ${toolsMod.TEAM_TOOL_NAMES.length}`)
   const expected = [
     'send_message_to_member', 'await_human_reply', 'request_teammate',
-    'approve_request', 'remove_member', 'review_member', 'list_team',
+    'approve_request', 'remove_member', 'review_member', 'interrupt_member',
+    'list_team',
   ]
   check('all expected team tools present',
     expected.every((n) => toolsMod.TEAM_TOOL_NAMES.includes(n)))
@@ -220,6 +221,7 @@ try {
     send: async () => ({ delivered: false, reason: 'no_live_agent' }),
     sleep: async () => ({ dormant: true }),
     spawn: async () => ({ sessionId: 'sess-new' }),
+    interrupt: async () => ({ interrupted: false, reason: 'not_running' }),
     backupConversation: async () => ({ backedUp: true, assetId: 'a_backup' }),
   }
   const defs = toolsMod.createTeamTools({
@@ -231,7 +233,7 @@ try {
     conversationFor: () => 'sess-alice',
     teamRuntime: fakeRuntime,
   })
-  check('7 definitions built', defs.length === 7)
+  check('8 definitions built', defs.length === 8)
   check('every team tool has output.render',
     defs.every((d) => d.output && typeof d.output.render === 'function'))
 
